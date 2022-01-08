@@ -21,6 +21,8 @@ public class Insert extends Operator {
     private int tableId;
     private TupleDesc td;
 
+    private volatile boolean executed = false;
+
     /**
      * Constructor.
      *
@@ -83,6 +85,9 @@ public class Insert extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+        if (executed) {
+            return null;
+        }
         int count = 0;
         try {
             while (child.hasNext()) {
@@ -90,7 +95,6 @@ public class Insert extends Operator {
 //                t.setRecordId(new RecordId());
                 Database.getBufferPool().insertTuple(tid,tableId, t);
                 count ++;
-//                return t;
             }
 
         } catch (IOException e) {
@@ -98,6 +102,7 @@ public class Insert extends Operator {
         }
         Tuple t = new Tuple(new TupleDesc(new Type[]{Type.INT_TYPE}));
         t.setField(0, new IntField(count));
+        executed = true;
         return t;
     }
 
