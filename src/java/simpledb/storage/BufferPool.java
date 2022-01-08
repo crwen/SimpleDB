@@ -40,7 +40,7 @@ public class BufferPool {
 
     private int numPages;
 
-    private ConcurrentHashMap<Integer, Page> pageTable;
+    private ConcurrentHashMap<PageId, Page> pageTable;
 
     private Replacer replacer;
 
@@ -90,16 +90,16 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        if (!pageTable.containsKey(pid.hashCode())) {
+        if (!pageTable.containsKey(pid)) {
             DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
             Page page = dbFile.readPage(pid);
             if (pageTable.size() >= numPages) {
                 evictPage();
             }
-            pageTable.put(pid.hashCode(), page);
+            pageTable.put(pid, page);
             replacer.add(pid);
         }
-        return pageTable.get(pid.hashCode());
+        return pageTable.get(pid);
     }
 
     /**
@@ -165,12 +165,13 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
 
-        RecordId recordId = t.getRecordId();
-        HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
-        List<Page> pages = heapFile.insertTuple(tid, t);
+        DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+        List<Page> pages = dbFile.insertTuple(tid, t);
         for (Page page : pages) {
-            pageTable.put(page.getId().hashCode(), page);
             page.markDirty(true, tid);
+            if (pageTable.size() >= numPages)
+                evictPage();
+            pageTable.put(page.getId(), page);
         }
     }
 
@@ -195,14 +196,11 @@ public class BufferPool {
         DbFile dbFile = Database.getCatalog().getDatabaseFile(recordId.getPageId().getTableId());
         List<Page> pages = dbFile.deleteTuple(tid, t);
         for (Page page : pages) {
-            pageTable.put(page.getId().hashCode(), page);
-//            getPage(tid, page.getId(), Permissions.READ_WRITE);
             page.markDirty(true, tid);
-//            dbFile.writePage(page);
+            if (pageTable.size() >= numPages)
+                evictPage();
+            pageTable.put(page.getId(), page);
         }
-//        HeapPage page = (HeapPage) getPage(tid, recordId.getPageId(), Permissions.READ_WRITE);
-//        page.markDirty(true, tid);
-//        page.deleteTuple(t);
     }
 
     /**
@@ -213,7 +211,7 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-        for (Map.Entry<Integer, Page> entry : pageTable.entrySet()) {
+        for (Map.Entry<PageId, Page> entry : pageTable.entrySet()) {
             Page page = entry.getValue();
             if (page.isDirty() != null) {
                 flushPage(entry.getValue().getId());
@@ -233,8 +231,8 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
-        if (pageTable.containsKey(pid.hashCode())) {
-            pageTable.remove(pid.hashCode());
+        if (pageTable.containsKey(pid)) {
+            pageTable.remove(pid);
         }
     }
 
@@ -246,8 +244,8 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        if (pageTable.containsKey(pid.hashCode())) {
-            HeapPage page = (HeapPage) pageTable.get(pid.hashCode());
+        if (pageTable.containsKey(pid)) {
+            HeapPage page = (HeapPage) pageTable.get(pid);
             TransactionId tid = page.isDirty();
             page.markDirty(false, tid);
             dbFile.writePage(page);
@@ -274,7 +272,7 @@ public class BufferPool {
             return;
         try {
             flushPage(victimPid);
-            pageTable.remove(victimPid.hashCode());
+            pageTable.remove(victimPid);
         } catch (IOException e) {
             throw new DbException(e.getMessage());
         }

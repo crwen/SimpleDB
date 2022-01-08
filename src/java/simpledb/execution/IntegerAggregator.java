@@ -65,7 +65,7 @@ public class IntegerAggregator implements Aggregator {
         // some code goes here
         Field key;
         if (gbfield == Aggregator.NO_GROUPING) {
-            key = tup.getField(afield);
+            key = new IntField(-1);
         } else {
             key = tup.getField(gbfield);
         }
@@ -74,8 +74,10 @@ public class IntegerAggregator implements Aggregator {
         switch (what) {
             case COUNT:
                 value = results.getOrDefault(key, new AggValue(0, 0));
+                value.setValue(value.getCount() + 1);
                 break;
             case SUM:
+            case AVG:
                 value = results.getOrDefault(key, new AggValue(0, 0));
                 value.setValue(value.value + aggf.getValue());
                 break;
@@ -88,10 +90,10 @@ public class IntegerAggregator implements Aggregator {
                 value = results.getOrDefault(key, new AggValue(Integer.MAX_VALUE, 0));
                 value.setValue(Math.min(value.value, aggf.getValue()));
                 break;
-            case AVG:
-                value = results.getOrDefault(key, new AggValue(0, 0));
-                value.setValue((value.value * value.count + aggf.getValue()) / (value.count+1));
-                break;
+//            case AVG:
+//                value = results.getOrDefault(key, new AggValue(0, 0));
+//                value.setValue( (value.value * value.count + aggf.getValue()) / (value.count+1));
+//                break;
             default:
                 throw new IllegalArgumentException("Illegal aggregator " + what.toString());
         }
@@ -112,11 +114,16 @@ public class IntegerAggregator implements Aggregator {
         List<Tuple> tupleList = new ArrayList<>(results.size());
         for (Map.Entry<Field, AggValue> entry : results.entrySet()) {
             Tuple t = new Tuple(tupleDesc);
-            if (gbfield == Aggregator.NO_GROUPING) {
-                t.setField(0, new IntField(entry.getValue().getValue()));
-            } else {
+            int aidx = 0;
+            if (gbfield != Aggregator.NO_GROUPING) {
+                aidx = 1;
                 t.setField(0, entry.getKey());
-                t.setField(1, new IntField(entry.getValue().getValue()));
+//                t.setField(1, new IntField(entry.getValue().getValue()));
+            }
+            if (what.equals(Op.AVG)) {
+                t.setField(aidx, new IntField( entry.getValue().getValue() / entry.getValue().getCount() ));
+            } else {
+                t.setField(aidx, new IntField(entry.getValue().getValue()));
             }
             tupleList.add(t);
         }
