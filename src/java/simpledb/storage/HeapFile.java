@@ -23,7 +23,6 @@ public class HeapFile implements DbFile {
 
     private File file;
     private TupleDesc tupleDesc;
-    private ArrayList<Page> modifyPages = new ArrayList<>();
     private BufferPool bufferPool;
 
     /**
@@ -117,7 +116,6 @@ public class HeapFile implements DbFile {
         RandomAccessFile f = new RandomAccessFile(file, "rw");
         f.seek(offset);
         f.write(page.getPageData());
-
     }
 
     /**

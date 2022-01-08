@@ -11,7 +11,10 @@ import java.io.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -39,6 +42,10 @@ public class BufferPool {
 
     private ConcurrentHashMap<Integer, Page> pageTable;
 
+    private Replacer replacer;
+
+//    private ReadWriteLock lock = new ReentrantReadWriteLock();
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -48,6 +55,7 @@ public class BufferPool {
         // some code goes here
         this.numPages = numPages;
         pageTable = new ConcurrentHashMap<>();
+        replacer = new LRUReplacer(numPages);
     }
     
     public static int getPageSize() {
@@ -85,7 +93,11 @@ public class BufferPool {
         if (!pageTable.containsKey(pid.hashCode())) {
             DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
             Page page = dbFile.readPage(pid);
+            if (pageTable.size() >= numPages) {
+                evictPage();
+            }
             pageTable.put(pid.hashCode(), page);
+            replacer.add(pid);
         }
         return pageTable.get(pid.hashCode());
     }
@@ -184,6 +196,7 @@ public class BufferPool {
         List<Page> pages = dbFile.deleteTuple(tid, t);
         for (Page page : pages) {
             pageTable.put(page.getId().hashCode(), page);
+//            getPage(tid, page.getId(), Permissions.READ_WRITE);
             page.markDirty(true, tid);
 //            dbFile.writePage(page);
         }
@@ -200,6 +213,12 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
+        for (Map.Entry<Integer, Page> entry : pageTable.entrySet()) {
+            Page page = entry.getValue();
+            if (page.isDirty() != null) {
+                flushPage(entry.getValue().getId());
+            }
+        }
 
     }
 
@@ -214,6 +233,9 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        if (pageTable.containsKey(pid.hashCode())) {
+            pageTable.remove(pid.hashCode());
+        }
     }
 
     /**
@@ -223,6 +245,13 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+        if (pageTable.containsKey(pid.hashCode())) {
+            HeapPage page = (HeapPage) pageTable.get(pid.hashCode());
+            TransactionId tid = page.isDirty();
+            page.markDirty(false, tid);
+            dbFile.writePage(page);
+        }
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -230,6 +259,7 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+
     }
 
     /**
@@ -239,6 +269,15 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        PageId victimPid = replacer.victim();
+        if (victimPid == null)
+            return;
+        try {
+            flushPage(victimPid);
+            pageTable.remove(victimPid.hashCode());
+        } catch (IOException e) {
+            throw new DbException(e.getMessage());
+        }
     }
 
 }
