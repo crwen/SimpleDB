@@ -5,7 +5,7 @@ import simpledb.common.Type;
 import simpledb.execution.Predicate;
 import simpledb.execution.SeqScan;
 import simpledb.storage.*;
-import simpledb.transaction.Transaction;
+import simpledb.transaction.TransactionId;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -20,6 +20,17 @@ import java.util.concurrent.ConcurrentMap;
  * This class is not needed in implementing lab1 and lab2.
  */
 public class TableStats {
+
+    /*The table over which to compute statistics*/
+    private int tableId;
+    /*The cost per page of IO.Doesn't differentiate between sequential-scan IO and disk seeks.*/
+    private int ioCostPerPage;
+    private int numTuples;
+    private int numPages;
+    private TupleDesc td;
+    private DbFile dbFile;
+
+    private Map<Integer, Histogram> statistics;
 
     private static final ConcurrentMap<String, TableStats> statsMap = new ConcurrentHashMap<>();
 
@@ -87,6 +98,52 @@ public class TableStats {
         // necessarily have to (for example) do everything
         // in a single scan of the table.
         // some code goes here
+        this.tableId = tableid;
+        this.ioCostPerPage = ioCostPerPage;
+        this.dbFile =  Database.getCatalog().getDatabaseFile(tableid);
+        this.numPages = ((HeapFile)dbFile).numPages();
+        this.td = dbFile.getTupleDesc();
+        this.statistics = new HashMap<>();
+        buildStatistics(td);
+    }
+
+    private void buildStatistics(TupleDesc td) {
+        SeqScan scan = new SeqScan(new TransactionId(), tableId, "");
+        try {
+            scan.open();
+            for (int i = 0; i < td.numFields(); i++) {
+                int max = Integer.MIN_VALUE;
+                int min = Integer.MAX_VALUE;
+                if (td.getFieldType(i).equals(Type.INT_TYPE)) {
+                    while (scan.hasNext()) {
+                        Tuple tuple = scan.next();
+                        IntField field = (IntField) tuple.getField(i);
+                        max = Math.max(max, field.getValue());
+                        min = Math.min(min, field.getValue());
+                    }
+                    statistics.put(i, new IntHistogram(NUM_HIST_BINS, min, max));
+                    scan.rewind();
+                } else {
+                    statistics.put(i, new StringHistogram(NUM_HIST_BINS));
+                }
+            }
+            scan.rewind();
+            // compute
+            while (scan.hasNext()) {
+                numTuples++;
+                Tuple tuple = scan.next();
+                for (int i = 0; i < td.numFields(); i++) {
+                    Field field = tuple.getField(i);
+                    if (field.getType().equals(Type.INT_TYPE)) {
+                        statistics.get(i).addValue(((IntField) field).getValue());
+                    } else {
+                        statistics.get(i).addValue(((StringField) field).getValue());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -103,7 +160,7 @@ public class TableStats {
      */
     public double estimateScanCost() {
         // some code goes here
-        return 0;
+        return numPages * ioCostPerPage;
     }
 
     /**
@@ -117,7 +174,7 @@ public class TableStats {
      */
     public int estimateTableCardinality(double selectivityFactor) {
         // some code goes here
-        return 0;
+        return (int) (numTuples * selectivityFactor);
     }
 
     /**
@@ -150,7 +207,13 @@ public class TableStats {
      */
     public double estimateSelectivity(int field, Predicate.Op op, Field constant) {
         // some code goes here
-        return 1.0;
+        double sel = 0;
+        if (constant.getType().equals(Type.INT_TYPE)) {
+            sel = statistics.get(field).estimateSelectivity(op, ((IntField)constant).getValue());
+        } else {
+            sel = statistics.get(field).estimateSelectivity(op, ((StringField)constant).getValue());
+        }
+        return sel;
     }
 
     /**
@@ -158,7 +221,7 @@ public class TableStats {
      * */
     public int totalTuples() {
         // some code goes here
-        return 0;
+        return numTuples;
     }
 
 }
