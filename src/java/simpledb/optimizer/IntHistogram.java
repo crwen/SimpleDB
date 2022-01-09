@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** A class to represent a fixed-width histogram over a single integer-based field.
  */
-public class IntHistogram {
+public class IntHistogram implements Histogram<Integer> {
     /*The number of buckets to split the input value into.*/
     private int buckets;
     /*The maximum integer value that will ever be passed to this class for histogramming*/
@@ -50,7 +50,7 @@ public class IntHistogram {
      * Add a value to the set of values that you are keeping a histogram of.
      * @param v Value to add to the histogram
      */
-    public void addValue(int v) {
+    public void addValue(Integer v) {
     	// some code goes here
         count ++;
         histogram[getBucketsIndex(v)] ++;
@@ -70,7 +70,7 @@ public class IntHistogram {
      * @param v Value
      * @return Predicted selectivity of this particular operator and value
      */
-    public double estimateSelectivity(Predicate.Op op, int v) {
+    public double estimateSelectivity(Predicate.Op op, Integer v) {
 
     	// some code goes here
         double cnt = 0;
@@ -123,7 +123,7 @@ public class IntHistogram {
         }
         return cnt/count;
     }
-    
+
     /**
      * @return
      *     the average selectivity of this histogram.
