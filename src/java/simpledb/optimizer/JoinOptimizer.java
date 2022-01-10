@@ -18,6 +18,7 @@ import javax.swing.tree.*;
 public class JoinOptimizer {
     final LogicalPlan p;
     final List<LogicalJoinNode> joins;
+    final static double scanRange = 0.3;
 
     /**
      * Constructor
@@ -130,7 +131,10 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+
+            // iocost: cost1 + card1 * cost2
+            // cpucost: card1 * card2
+            return cost1 + card1 * cost2 + card1 * card2;
         }
     }
 
@@ -176,6 +180,17 @@ public class JoinOptimizer {
                                                    Map<String, Integer> tableAliasToId) {
         int card = 1;
         // some code goes here
+
+        if (joinOp.equals(Predicate.Op.EQUALS)) {
+            if (t1pkey || t2pkey) {
+                card =  t1pkey ? card2 : card1;
+            } else {
+                card = Math.max(card1, card2);
+            }
+        } else {
+            card = (int) (scanRange * card * card2);
+        }
+
         return card <= 0 ? 1 : card;
     }
 
