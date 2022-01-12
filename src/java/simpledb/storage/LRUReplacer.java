@@ -8,11 +8,21 @@ public class LRUReplacer implements Replacer{
 
     private HashMap<PageId, Node> map;
     private int size;
+    private int numPages;
     private Node head;
     private Node tail;
 
     private ReentrantLock lock = new ReentrantLock();
 
+    LRUReplacer(int numPages) {
+        size = 0;
+        this.numPages = numPages;
+        head = new Node(null);
+        tail = new Node(null);
+        head.next = tail;
+        tail.prev = head;
+        map = new HashMap<>();
+    }
 
     class Node {
         Node next, prev;
@@ -29,26 +39,17 @@ public class LRUReplacer implements Replacer{
         next.prev = prev;
     }
 
-    public LRUReplacer(int size) {
-        this.size = size;
-        head = new Node(null);
-        tail = new Node(null);
-        head.next = tail;
-        tail.prev = head;
-        map = new HashMap<>();
-    }
 
 
     @Override
     public PageId victim() {
         try {
             lock.lock();
-            if (map.size() < size) {
+            if (size == 0)
                 return null;
-            }
             Node victimed = removeLast();
             map.remove(victimed.pid);
-
+            size --;
             return victimed.pid;
         } finally {
             lock.unlock();
@@ -64,14 +65,53 @@ public class LRUReplacer implements Replacer{
                 remove(node);
                 put2Head(node);
             } else {
-                if (map.size() >= size) {
+                if (map.size() >= numPages) {
                     Node removeNode = removeLast();
-                    map.remove(removeNode);
+                    map.remove(removeNode.pid);
+                    size --;
                 }
                 Node newNode = new Node(pageId);
                 put2Head(newNode);
                 map.put(pageId, newNode);
+                size ++;
             }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public void pin(PageId pageId) {
+        try {
+            lock.lock();
+            if (!map.containsKey(pageId)) {
+                return;
+            }
+            Node pinNode = map.get(pageId);
+            remove(pinNode);
+            map.remove(pinNode.pid);
+            size --;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public void unpin(PageId pageId) {
+        try {
+            lock.lock();
+            if (map.containsKey(pageId))
+                return;
+            if (size == numPages) {
+                if (victim() != null) {
+                    size --;
+                }
+            }
+            Node newNode = new Node(pageId);
+            put2Head(newNode);
+            map.put(pageId, newNode);
+            size ++;
+
         } finally {
             lock.unlock();
         }
@@ -89,5 +129,6 @@ public class LRUReplacer implements Replacer{
         node.next = head.next;
         head.next.prev = node;
         node.prev = head;
+        head.next = node;
     }
 }

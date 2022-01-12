@@ -6,4 +6,7 @@ public interface Replacer {
 
     void add(PageId pageId);
 
+    void pin(PageId pageId);
+    void unpin(PageId pageId);
+
 }
