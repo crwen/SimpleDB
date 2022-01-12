@@ -173,7 +173,13 @@ public class BufferPool {
             lockType = WRITE_LOCK;
         }
 
+        long start = System.currentTimeMillis();
+        long timeout = new Random().nextInt(2000) + 2000;
         while (!lockManager.acquiredLock(tid, pid, lockType)) {
+            long now = System.currentTimeMillis();
+            if (now - start > timeout) {
+                throw new TransactionAbortedException();
+            }
 
         }
         if (!pageTable.containsKey(pid)) {
