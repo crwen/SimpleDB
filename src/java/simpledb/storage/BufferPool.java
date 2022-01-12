@@ -374,6 +374,12 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (Map.Entry<PageId, Page> entry : pageTable.entrySet()) {
+            Page page = entry.getValue();
+            if (page.isDirty() == tid) {
+                flushPage(entry.getKey());
+            }
+        }
     }
 
     /**
@@ -388,7 +394,7 @@ public class BufferPool {
             return;
         try {
             HeapPage page = (HeapPage) pageTable.get(victimPid);
-            if (page.isDirty() == null) {
+            if (page.isDirty() != null) {
                 flushPage(victimPid);
             }
             pageTable.remove(victimPid);
