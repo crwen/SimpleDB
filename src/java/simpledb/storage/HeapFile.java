@@ -140,6 +140,8 @@ public class HeapFile implements DbFile {
                     writePage(page);
                 }
                 return Collections.singletonList(page);
+            } else {
+                bufferPool.unsafeReleasePage(tid, pageId);
             }
         }
     }

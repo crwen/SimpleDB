@@ -109,8 +109,8 @@ public class BufferPool {
             }
         }
 
-        public boolean hasLock(TransactionId tid, PageId pid) {
-            if (!lockMap.containsKey(tid))
+        public synchronized boolean hasLock(TransactionId tid, PageId pid) {
+            if (!lockMap.containsKey(pid))
                 return false;
             for (Lock lock : lockMap.get(pid)) {
                 if (lock.tid == tid)
@@ -179,12 +179,17 @@ public class BufferPool {
         if (!pageTable.containsKey(pid)) {
             DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
             Page page = dbFile.readPage(pid);
+
             if (pageTable.size() >= numPages) {
                 evictPage();
             }
+            if (lockType == READ_LOCK) {
+                replacer.add(pid);
+            }
+
             pageTable.put(pid, page);
-            replacer.add(pid);
         }
+
 
         return pageTable.get(pid);
     }
@@ -201,6 +206,7 @@ public class BufferPool {
     public  void unsafeReleasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+//        replacer.unpin(pid);
         lockManager.releaseLock(tid, pid);
     }
 
@@ -232,6 +238,20 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+        try {
+            for (PageId pageId : pageTable.keySet()) {
+                if (holdsLock(tid, pageId)) {
+                    if (commit) {
+                        flushPage(pageId);
+                    } else {
+                        discardPage(pageId);
+                    }
+                    lockManager.releaseLock(tid, pageId);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
     }
 
@@ -258,6 +278,7 @@ public class BufferPool {
         DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
         List<Page> pages = dbFile.insertTuple(tid, t);
         for (Page page : pages) {
+//            getPage(tid, page.getId(), Permissions.READ_WRITE);
             page.markDirty(true, tid);
             if (pageTable.size() >= numPages)
                 evictPage();
@@ -347,7 +368,6 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
-
     }
 
     /**
@@ -361,7 +381,10 @@ public class BufferPool {
         if (victimPid == null)
             return;
         try {
-            flushPage(victimPid);
+            HeapPage page = (HeapPage) pageTable.get(victimPid);
+            if (page.isDirty() == null) {
+                flushPage(victimPid);
+            }
             pageTable.remove(victimPid);
         } catch (IOException e) {
             throw new DbException(e.getMessage());
