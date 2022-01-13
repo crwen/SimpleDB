@@ -362,7 +362,7 @@ public class BufferPool {
         // not necessary for lab1
         DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
         if (pageTable.containsKey(pid)) {
-            HeapPage page = (HeapPage) pageTable.get(pid);
+            Page page = pageTable.get(pid);
             TransactionId tid = page.isDirty();
             page.markDirty(false, tid);
             dbFile.writePage(page);

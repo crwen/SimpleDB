@@ -3,12 +3,9 @@ package simpledb.index;
 import java.io.*;
 import java.util.*;
 
-import simpledb.common.Database;
-import simpledb.common.Permissions;
+import simpledb.common.*;
 import simpledb.execution.IndexPredicate;
 import simpledb.execution.Predicate.Op;
-import simpledb.common.DbException;
-import simpledb.common.Debug;
 import simpledb.storage.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
@@ -188,7 +185,49 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+		boolean leftMost = false;
+		if (f == null) {
+			leftMost = true;
+		}
+		BTreeRootPtrPage rootPtr = null;
+		BTreePageId rootId = null;
+		try {
+			rootPtr = getRootPtrPage(tid, dirtypages);
+			rootId = rootPtr.getRootId();
+			BTreePage root = (BTreePage) getPage(tid, dirtypages, rootId, Permissions.READ_ONLY);
+			if (rootId.pgcateg() == BTreePageId.LEAF) {
+				return (BTreeLeafPage) root;
+			}
+			BTreePageId currPid = rootId;
+			while (currPid.pgcateg() == BTreePageId.INTERNAL) {
+				BTreeInternalPage internalPage = (BTreeInternalPage) getPage(tid, dirtypages, currPid, Permissions.READ_ONLY);
+				int numEntries = internalPage.getNumEntries();
+				if (leftMost) {
+					currPid = internalPage.getChildId(0);
+					continue;
+				}
+				for (int i = 1; i <= numEntries; i++) {
+					Field key = internalPage.getKey(i);
+					if (key.compare(Op.GREATER_THAN, f)) {
+						currPid = internalPage.getChildId(i-1);
+						break;
+					} else if (key.compare(Op.EQUALS, f) || i == numEntries) {
+						currPid = internalPage.getChildId(i);
+					}
+				}
+			}
+			return (BTreeLeafPage) getPage(tid, dirtypages, currPid, perm);
+
+		} catch (IOException e) {
+			throw new DbException(e.getMessage());
+		} catch (NullPointerException e) {
+			BTreePageId currPid = rootId;
+			while (currPid.pgcateg() == BTreePageId.INTERNAL) {
+				BTreeInternalPage internalPage = (BTreeInternalPage) getPage(tid, dirtypages, currPid, Permissions.READ_ONLY);
+				currPid = internalPage.getChildId(0);
+			}
+			return (BTreeLeafPage) getPage(tid, dirtypages, currPid, perm);
+		}
 	}
 	
 	/**
