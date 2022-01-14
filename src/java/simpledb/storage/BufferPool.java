@@ -393,7 +393,7 @@ public class BufferPool {
         if (victimPid == null)
             return;
         try {
-            HeapPage page = (HeapPage) pageTable.get(victimPid);
+            Page page =  pageTable.get(victimPid);
             if (page.isDirty() != null) {
                 flushPage(victimPid);
             }
