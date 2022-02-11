@@ -811,6 +811,30 @@ public class BTreeFile implements DbFile {
 		// that the entries are evenly distributed. Be sure to update
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
+		int total = leftSibling.getNumEntries() + page.getNumEntries();
+		int moved =  total / 2 - page.getNumEntries();
+
+		Iterator<BTreeEntry> iter = leftSibling.reverseIterator();
+		BTreeEntry rightFirst = page.iterator().next();
+		BTreeEntry leftLast = iter.next();
+		// delete the last entry of left
+		leftSibling.deleteKeyAndRightChild(leftLast);
+
+		BTreeEntry entry = new BTreeEntry(parentEntry.getKey(), leftLast.getRightChild(), rightFirst.getLeftChild());
+		page.insertEntry(entry);
+		page.insertEntry(leftLast);
+		moved -= 2;
+		while (iter.hasNext() && moved -- > 0) {
+			BTreeEntry e = iter.next();
+			leftSibling.deleteKeyAndRightChild(e);
+			page.insertEntry(e);
+		}
+		BTreeEntry e = iter.next();
+		leftSibling.deleteKeyAndRightChild(e);
+		// update parent
+		parentEntry.setKey(e.getKey());
+		parent.updateEntry(parentEntry);
+		updateParentPointers(tid, dirtypages, page);
 	}
 	
 	/**
@@ -838,15 +862,23 @@ public class BTreeFile implements DbFile {
 		// that the entries are evenly distributed. Be sure to update
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
-		int num = (rightSibling.getNumEntries() + page.getNumEntries() ) / 2;
+		int total = rightSibling.getNumEntries() + page.getNumEntries();
+		int moved = total / 2 - page.getNumEntries();
+
 		Iterator<BTreeEntry> iter = rightSibling.iterator();
-//		BTreeEntry left = page.reverseIterator().next();
-//		BTreeEntry entry = new BTreeEntry(parentEntry.getKey(), left.getRightChild(), right)
-		while (iter.hasNext() && num -- > 0) {
+		BTreeEntry leftLast = page.reverseIterator().next();
+		BTreeEntry rightFirst = iter.next();
+		rightSibling.deleteKeyAndLeftChild(rightFirst);
+		BTreeEntry entry = new BTreeEntry(parentEntry.getKey(), leftLast.getRightChild(), rightFirst.getLeftChild());
+		page.insertEntry(entry);
+		page.insertEntry(rightFirst);
+		moved -= 2;
+		while (iter.hasNext() && moved -- > 0) {
 			BTreeEntry e = iter.next();
 			rightSibling.deleteKeyAndLeftChild(e);
 			page.insertEntry(e);
 		}
+		// update parent
 		BTreeEntry e = iter.next();
 		rightSibling.deleteKeyAndLeftChild(e);
 		parentEntry.setKey(e.getKey());
