@@ -697,6 +697,41 @@ public class BTreeFile implements DbFile {
         // Move some of the tuples from the sibling to the page so
 		// that the tuples are evenly distributed. Be sure to update
 		// the corresponding parent entry.
+		int total = page.getNumTuples() + sibling.getNumTuples();
+		int moved = total / 2 - page.getNumTuples();
+		Tuple mid;
+		if (isRightSibling) {
+			// move from right to left
+			mid = moveFrontToEnd(sibling, page, moved);
+		} else {
+			// move from left to right
+			mid = moveEndToFront(sibling, page, moved);
+		}
+		// update parent key
+		entry.setKey(mid.getField(parent.keyField));
+		parent.updateEntry(entry);
+	}
+
+	private Tuple moveEndToFront(BTreeLeafPage leftSibling, BTreeLeafPage page, int num) throws DbException {
+		Iterator<Tuple> iter = leftSibling.reverseIterator();
+		Tuple mid = null;
+		while (iter.hasNext() && num-- > 0) {
+			Tuple t = iter.next();
+			leftSibling.deleteTuple(t);
+			page.insertTuple(t);
+			mid = t;
+		}
+		return mid;
+	}
+
+	private Tuple moveFrontToEnd(BTreeLeafPage rightSibling, BTreeLeafPage page, int num) throws DbException {
+		Iterator<Tuple> iter = rightSibling.iterator();
+		while (iter.hasNext() && num-- > 0) {
+			Tuple t = iter.next();
+			rightSibling.deleteTuple(t);
+			page.insertTuple(t);
+		}
+		return iter.next();
 	}
 
 	/**
@@ -803,6 +838,20 @@ public class BTreeFile implements DbFile {
 		// that the entries are evenly distributed. Be sure to update
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
+		int num = (rightSibling.getNumEntries() + page.getNumEntries() ) / 2;
+		Iterator<BTreeEntry> iter = rightSibling.iterator();
+//		BTreeEntry left = page.reverseIterator().next();
+//		BTreeEntry entry = new BTreeEntry(parentEntry.getKey(), left.getRightChild(), right)
+		while (iter.hasNext() && num -- > 0) {
+			BTreeEntry e = iter.next();
+			rightSibling.deleteKeyAndLeftChild(e);
+			page.insertEntry(e);
+		}
+		BTreeEntry e = iter.next();
+		rightSibling.deleteKeyAndLeftChild(e);
+		parentEntry.setKey(e.getKey());
+		parent.updateEntry(parentEntry);
+		updateParentPointers(tid, dirtypages, page);
 	}
 	
 	/**
