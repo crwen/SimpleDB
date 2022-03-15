@@ -5,6 +5,7 @@ import simpledb.common.Database;
 import simpledb.transaction.TransactionId;
 import simpledb.common.Debug;
 
+import javax.xml.crypto.Data;
 import java.io.*;
 import java.util.*;
 import java.lang.reflect.*;
@@ -460,6 +461,42 @@ public class LogFile {
             synchronized(this) {
                 preAppend();
                 // some code goes here
+//                Page page = readPageData(raf);
+                currentOffset = raf.getFilePointer();
+                Long startOffset = tidToFirstLogRecord.get(tid.getId());
+//                Page beforeImage = page.getBeforeImage();
+                raf.seek(startOffset);
+                HashSet<PageId> set = new HashSet<>();
+
+                while (raf.getFilePointer() < currentOffset) {
+                    int type = raf.readInt();
+                    long txid = raf.readLong();
+                    switch (type) {
+                        case UPDATE_RECORD:
+                            Page beforeImage = readPageData(raf);
+                            Page afterImage = readPageData(raf);
+                            PageId pageId = beforeImage.getId();
+                            if (txid == tid.getId() && !set.contains(pageId)) {
+                                set.add(pageId);
+//                                Database.getBufferPool().discardPage(pageId);
+                                Database.getCatalog().getDatabaseFile(pageId.getTableId()).writePage(beforeImage);
+                            }
+                            break;
+                        case CHECKPOINT_RECORD:
+                            int txCnt = raf.readInt();
+                            while (txCnt -- > 0) {
+                                raf.readLong();
+                                raf.readLong();
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                    raf.readLong();
+                }
+
+
+
             }
         }
     }
@@ -487,6 +524,60 @@ public class LogFile {
             synchronized (this) {
                 recoveryUndecided = false;
                 // some code goes here
+                raf.seek(0);
+//                raf = new RandomAccessFile(logFile, "rw");
+                Set<Long> committedId = new HashSet<>();
+                Map<Long, List<Page>> beforePages = new HashMap<>();
+                Map<Long, List<Page>> afterPages = new HashMap<>();
+                long len = raf.length();
+                long checkpoint = raf.readLong();
+                if (checkpoint != -1) {
+//                    raf.seek(checkpoint);
+                }
+                while (raf.getFilePointer() < len) {
+                    int type = raf.readInt();
+                    long txid = raf.readLong();
+                    switch (type) {
+                        case UPDATE_RECORD:
+                            Page beforeImage = readPageData(raf);
+                            Page afterImage = readPageData(raf);
+                            List<Page> pageList = beforePages.getOrDefault(txid, new ArrayList<>());
+                            pageList.add(beforeImage);
+                            beforePages.put(txid, pageList);
+                            List<Page> pageList2 = beforePages.getOrDefault(txid, new ArrayList<>());
+                            pageList.add(afterImage);
+                            afterPages.put(txid, pageList2);
+                            break;
+                        case COMMIT_RECORD:
+                            committedId.add(txid);
+                            break;
+                        case CHECKPOINT_RECORD:
+                            int numTxs = raf.readInt();
+                            while (numTxs -- > 0) {
+                                raf.readLong();
+                                raf.readLong();
+                            }
+                            break;
+                    }
+                    raf.readLong();
+                }
+                for (Long txid : beforePages.keySet()) {
+                    if (!committedId.contains(txid)) {
+                        List<Page> pages = beforePages.get(txid);
+                        for (Page page : pages) {
+                            Database.getCatalog().getDatabaseFile(page.getId().getTableId()).writePage(page);
+                        }
+                    }
+                }
+
+                for (Long txid : committedId) {
+                    if (afterPages.containsKey(txid)) {
+                        List<Page> pages = afterPages.get(txid);
+                        for (Page page : pages) {
+                            Database.getCatalog().getDatabaseFile(page.getId().getTableId()).writePage(page);
+                        }
+                    }
+                }
             }
          }
     }

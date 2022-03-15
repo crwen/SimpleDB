@@ -84,11 +84,13 @@ public class IntHistogram implements Histogram<Integer> {
                 for (int i = idx + 1; i < buckets; i ++) {
                     cnt += histogram[i];
                 }
-                cnt += histogram[idx] * 1.0 /(end - start + 1) * (end - v);
+//                cnt += histogram[idx] * 1.0 /(end - start + 1) * (end - v);
+                cnt += histogram[idx] * 1.0 /width * (end - v);
                 break;
             case EQUALS:
                 if (v < min || v > max) return 0.0;
-                cnt = histogram[idx] * 1.0 /(end - start + 1);
+//                cnt = histogram[idx] * 1.0 /(end - start + 1);
+                cnt = histogram[idx] * 1.0 /width;
                 break;
             case LESS_THAN:
                 if (v <= min) return 0.0;
@@ -96,7 +98,8 @@ public class IntHistogram implements Histogram<Integer> {
                 for (int i = 0; i < idx; i ++) {
                     cnt += histogram[i];
                 }
-                cnt += histogram[idx] * 1.0 /(end - start + 1) * (v - start);
+//                cnt += histogram[idx] * 1.0 /(end - start + 1) * (v - start);
+                cnt += histogram[idx] * 1.0 /width * (v - start);
                 break;
             case LESS_THAN_OR_EQ:
                 if (v < min) return 0.0;
@@ -104,7 +107,8 @@ public class IntHistogram implements Histogram<Integer> {
                 for (int i = 0; i < idx; i ++) {
                     cnt += histogram[i];
                 }
-                cnt += histogram[idx] * 1.0 /(end - start + 1) * (v - start + 1);
+//                cnt += histogram[idx] * 1.0 /(end - start + 1) * (v - start + 1);
+                cnt += histogram[idx] * 1.0 /width * (v - start + 1);
                 break;
             case GREATER_THAN_OR_EQ:
                 if (v <= min) return 1.0;
@@ -112,11 +116,13 @@ public class IntHistogram implements Histogram<Integer> {
                 for (int i = idx + 1; i < buckets; i ++) {
                     cnt += histogram[i];
                 }
-                cnt += histogram[idx] * 1.0 /(end - start + 1) * (end - v + 1);
+//                cnt += histogram[idx] * 1.0 /(end - start + 1) * (end - v + 1);
+                cnt += histogram[idx] * 1.0 /width * (end - v + 1);
                 break;
             case NOT_EQUALS:
                 if (v < min || v > max) return 1.0;
-                cnt = count - histogram[idx] * 1.0 /(end - start + 1);
+//                cnt = count - histogram[idx] * 1.0 /(end - start + 1);
+                cnt = count - histogram[idx] * 1.0 /width;
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + op);

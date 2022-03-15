@@ -249,13 +249,16 @@ public class BufferPool {
                 if (holdsLock(tid, pageId)) {
                     if (commit) {
                         flushPage(pageId);
+                        Page page = getPage(tid, pageId, Permissions.READ_ONLY);
+                        // use current page contents as the before-image for the next transaction that modifies this page
+                        page.setBeforeImage();
                     } else {
                         discardPage(pageId);
                     }
                     lockManager.releaseLock(tid, pageId);
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | TransactionAbortedException | DbException e) {
             e.printStackTrace();
         }
 
@@ -330,6 +333,7 @@ public class BufferPool {
         // not necessary for lab1
         for (Map.Entry<PageId, Page> entry : pageTable.entrySet()) {
             Page page = entry.getValue();
+//            page.setBeforeImage();
             if (page.isDirty() != null) {
                 flushPage(entry.getValue().getId());
             }
@@ -363,8 +367,13 @@ public class BufferPool {
         DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
         if (pageTable.containsKey(pid)) {
             Page page = pageTable.get(pid);
-            TransactionId tid = page.isDirty();
-            page.markDirty(false, tid);
+            // append an update record to the log, with a before-image and after-image
+            TransactionId dirtier = page.isDirty();
+            if (dirtier != null) {
+                Database.getLogFile().logWrite(dirtier, page.getBeforeImage(), page);
+                Database.getLogFile().force();
+            }
+            page.markDirty(false, dirtier);
             dbFile.writePage(page);
         }
     }
