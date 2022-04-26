@@ -188,7 +188,7 @@ public class JoinOptimizer {
                 card = Math.max(card1, card2);
             }
         } else {
-            card = (int) (scanRange * card * card2);
+            card = (int) (scanRange * card1 * card2);
         }
 
         return card <= 0 ? 1 : card;
@@ -258,25 +258,29 @@ public class JoinOptimizer {
         for (int i = 1; i <= joins.size(); i++) {
             // enumerate the nodes
             nodeSets = enumerateSubsets(joins, i);
-            System.out.println(nodeSets);
             // find the best plan for every node
             for (Set<LogicalJoinNode> nodeSet : nodeSets) {
-                double costSoFar = Double.MAX_VALUE;
+                double bestCostSoFar = Double.MAX_VALUE;
+                CostCard bestPlan = new CostCard();
                 for (LogicalJoinNode node : nodeSet) {
                     // compute cost for node
                     CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities,
-                            node, nodeSet, costSoFar, planCache);
+                            node, nodeSet, bestCostSoFar, planCache);
                     if (costCard == null) continue;
-                    if (costCard.cost < costSoFar) {
-                        costSoFar = costCard.cost;
-                        planCache.addPlan(nodeSet, costSoFar, costCard.card, costCard.plan);
+                    if (costCard.cost < bestCostSoFar) {
+                        bestCostSoFar = costCard.cost;
+                        bestPlan = costCard;
+                        planCache.addPlan(nodeSet, bestCostSoFar, costCard.card, costCard.plan);
                     }
                 }
+//                planCache.addPlan(nodeSet, bestCostSoFar, bestPlan.card, bestPlan.plan);
             }
         }
         List<LogicalJoinNode> res = null;
         for (Set<LogicalJoinNode> nodeSet : nodeSets) {
-            res = planCache.getOrder(nodeSet);
+            if (nodeSet.size() == joins.size()) {
+                res = planCache.getOrder(nodeSet);
+            }
         }
         if (explain) {
             printJoins(res, planCache, stats, filterSelectivities);

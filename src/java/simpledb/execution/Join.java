@@ -1,12 +1,8 @@
 package simpledb.execution;
 
-import simpledb.common.Type;
-import simpledb.storage.Field;
-import simpledb.storage.IntField;
+import simpledb.storage.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.common.DbException;
-import simpledb.storage.Tuple;
-import simpledb.storage.TupleDesc;
 
 import java.util.*;
 
@@ -24,6 +20,11 @@ public class Join extends Operator {
     private OpIterator child2;
     private TupleDesc tupleDesc;
     private Tuple t1;
+    private Tuple t2;
+    private int t1Index ;
+    private int t2Index ;
+
+    private Map<String, List<Tuple>> map;
 
     /**
      * Constructor. Accepts two children to join and the predicate to join them
@@ -127,6 +128,13 @@ public class Join extends Operator {
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
 
+        if (predicate.getOperator().equals(Predicate.Op.EQUALS)) {
+            if (map == null) {
+                map = buildHashTableForChild1();
+            }
+            return probe();
+        }
+
         while (t1 != null || child1.hasNext()) {
             if (t1 == null)
                 t1 = child1.next();
@@ -151,6 +159,101 @@ public class Join extends Operator {
         }
 
         return null;
+    }
+
+    private Tuple probe() throws TransactionAbortedException, DbException {
+        while (t2 != null || child2.hasNext()) {
+            if (t2 == null) {
+                t2 = child2.next();
+            }
+            Field field = t2.getField(predicate.getField2());
+            String key = "";
+            if (field instanceof IntField) {
+                IntField intField = (IntField)field;
+                key = String.valueOf(intField.getValue());
+            } else {
+                StringField stringField = (StringField) field;
+                key = stringField.getValue();
+            }
+            if (map.containsKey(key)) {
+                List<Tuple> tupleList = map.get(key);
+                if (t1Index >= tupleList.size()) {
+                    if (child2.hasNext()) {
+                        t2 = child2.next();
+                        t1Index = 0;
+                    } else {
+                        t2 = null;
+                        t1Index = 0;
+                        return null;
+                    }
+                }
+                for (int i = t1Index; i < tupleList.size(); i++) {
+                    Tuple tup1 = tupleList.get(i);
+                    t1Index ++;
+                    if (predicate.filter(tup1, t2)) {
+                        Tuple tuple = new Tuple(tupleDesc);
+                        Iterator<Field> it1 = tup1.fields();
+                        Iterator<Field> it2 = t2.fields();
+                        int j = 0;
+                        while (it1.hasNext()) {
+                            tuple.setField(j ++, it1.next());
+                        }
+                        while (it2.hasNext()) {
+                            tuple.setField(j ++, it2.next());
+                        }
+                        return tuple;
+                    }
+                }
+                t2 = null;
+                t1Index = 0;
+            } else {
+                t2 = null;
+                t1Index = 0;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, List<Tuple>> buildHashTableForChild1() throws TransactionAbortedException, DbException {
+        Map<String, List<Tuple>> hashTable = new HashMap<>();
+        while (child1.hasNext()) {
+            Tuple t = child1.next();
+            int field1 = predicate.getField1();
+            Field field = t.getField(field1);
+            String key = "";
+            if (field instanceof IntField) {
+                IntField intField = (IntField)field;
+                key = String.valueOf(intField.getValue());
+            } else {
+                StringField stringField = (StringField) field;
+                key = stringField.getValue();
+            }
+            if (!hashTable.containsKey(key)) {
+                hashTable.put(key, new ArrayList<>());
+            }
+            hashTable.get(key).add(t);
+        }
+        return hashTable;
+    }
+
+    private void buildHashTableForChild2() throws TransactionAbortedException, DbException {
+        while (child2.hasNext()) {
+            Tuple t = child2.next();
+            int field1 = predicate.getField1();
+            Field field = t.getField(field1);
+            String key = "";
+            if (field instanceof IntField) {
+                IntField intField = (IntField)field;
+                key = String.valueOf(intField.getValue());
+            } else {
+                StringField stringField = (StringField) field;
+                key = stringField.getValue();
+            }
+            if (!map.containsKey(key)) {
+                map.put(key, new ArrayList<>());
+            }
+            map.get(key).add(t);
+        }
     }
 
     @Override
