@@ -13,6 +13,9 @@ import org.junit.Assert;
 import simpledb.common.*;
 import simpledb.execution.OpIterator;
 import simpledb.execution.SeqScan;
+import simpledb.execution.vectorize.Chunk;
+import simpledb.execution.vectorize.OpIteratorVec;
+import simpledb.execution.vectorize.SeqScanVec;
 import simpledb.storage.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
@@ -108,9 +111,61 @@ public class SystemTestUtil {
 
     public static void matchTuples(DbFile f, TransactionId tid, List<List<Integer>> tuples)
             throws DbException, TransactionAbortedException {
-        SeqScan scan = new SeqScan(tid, f.getId(), "");
+//        SeqScan scan = new SeqScan(tid, f.getId(), "");
+        SeqScanVec scan = new SeqScanVec(tid, f.getId(), "");
+
         matchTuples(scan, tuples);
     }
+
+    public static void matchTuples(OpIteratorVec iterator, List<List<Integer>> tuples)
+            throws DbException, TransactionAbortedException {
+        List<List<Integer>> copy = new ArrayList<>(tuples);
+
+        if (Debug.isEnabled()) {
+            Debug.log("Expected tuples:");
+            for (List<Integer> t : copy) {
+                Debug.log("\t" + Utility.listToString(t));
+            }
+        }
+
+        iterator.open();
+        while (iterator.hasNext()) {
+            Chunk chunk = iterator.next();
+            List<Tuple> tTuples = chunk.getTuples();
+            for (Tuple tTuple : tTuples) {
+                List<Integer> list = tupleToList(tTuple);
+                boolean isExpected = copy.remove(list);
+                Debug.log("scanned tuple: %s (%s)", tTuple, isExpected ? "expected" : "not expected");
+                if (!isExpected) {
+                    Assert.fail("expected tuples does not contain: " + tTuple);
+                }
+            }
+//            List<Integer> list = tupleToList(t);
+//            boolean isExpected = copy.remove(list);
+//            Debug.log("scanned tuple: %s (%s)", t, isExpected ? "expected" : "not expected");
+//            if (!isExpected) {
+//                Assert.fail("expected tuples does not contain: " + t);
+//            }
+        }
+        iterator.close();
+
+        if (!copy.isEmpty()) {
+            StringBuilder msg = new StringBuilder("expected to find the following tuples:\n");
+            final int MAX_TUPLES_OUTPUT = 10;
+            int count = 0;
+            for (List<Integer> t : copy) {
+                if (count == MAX_TUPLES_OUTPUT) {
+                    msg.append("[").append(copy.size() - MAX_TUPLES_OUTPUT).append(" more tuples]");
+                    break;
+                }
+                msg.append("\t").append(Utility.listToString(t)).append("\n");
+                count += 1;
+            }
+            Assert.fail(msg.toString());
+        }
+    }
+
+
 
     public static void matchTuples(OpIterator iterator, List<List<Integer>> tuples)
             throws DbException, TransactionAbortedException {

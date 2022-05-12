@@ -1,28 +1,23 @@
-package simpledb;
+package simpledb.vec;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 import junit.framework.JUnit4TestAdapter;
-
 import org.junit.Before;
 import org.junit.Test;
-
+import simpledb.execution.*;
 import simpledb.common.Utility;
-import simpledb.execution.Join;
-import simpledb.execution.JoinPredicate;
-import simpledb.execution.OpIterator;
-import simpledb.execution.Predicate;
-import simpledb.storage.Tuple;
+import simpledb.execution.vectorize.JoinVec;
+import simpledb.execution.vectorize.OpIteratorVec;
 import simpledb.storage.TupleDesc;
 import simpledb.systemtest.SimpleDbTestBase;
+
+import static org.junit.Assert.*;
 
 public class JoinTest extends SimpleDbTestBase {
 
   final int width1 = 2;
   final int width2 = 3;
-  OpIterator scan1;
-  OpIterator scan2;
+  OpIteratorVec scan1;
+  OpIteratorVec scan2;
   OpIterator eqJoin;
   OpIterator gtJoin;
 
@@ -41,11 +36,11 @@ public class JoinTest extends SimpleDbTestBase {
                     3, 4, 5,
                     4, 5, 6,
                     5, 6, 7 });
-    this.eqJoin = TestUtil.createTupleList(width1 + width2,
+    this.eqJoin = simpledb.TestUtil.createTupleList(width1 + width2,
         new int[] { 1, 2, 1, 2, 3,
                     3, 4, 3, 4, 5,
                     5, 6, 5, 6, 7 });
-    this.gtJoin = TestUtil.createTupleList(width1 + width2,
+    this.gtJoin = simpledb.TestUtil.createTupleList(width1 + width2,
         new int[] {
                     3, 4, 1, 2, 3, // 1, 2 < 3
                     3, 4, 2, 3, 4,
@@ -65,7 +60,7 @@ public class JoinTest extends SimpleDbTestBase {
    */
   @Test public void getTupleDesc() {
     JoinPredicate pred = new JoinPredicate(0, Predicate.Op.EQUALS, 0);
-    Join op = new Join(pred, scan1, scan2);
+    JoinVec op = new JoinVec(pred, scan1, scan2);
     TupleDesc expected = Utility.getTupleDesc(width1 + width2);
     TupleDesc actual = op.getTupleDesc();
     assertEquals(expected, actual);
@@ -76,19 +71,14 @@ public class JoinTest extends SimpleDbTestBase {
    */
   @Test public void rewind() throws Exception {
     JoinPredicate pred = new JoinPredicate(0, Predicate.Op.EQUALS, 0);
-    Join op = new Join(pred, scan1, scan2);
+    JoinVec op = new JoinVec(pred, scan1, scan2);
     op.open();
     while (op.hasNext()) {
       assertNotNull(op.next());
     }
     assertTrue(TestUtil.checkExhausted(op));
     op.rewind();
-    eqJoin.open();
-
-
-    Tuple expected = eqJoin.next();
-    Tuple actual = op.next();
-    assertTrue(TestUtil.compareTuples(expected, actual));
+    TestUtil.matchAllTuples(eqJoin, op);
   }
 
   /**
@@ -96,9 +86,10 @@ public class JoinTest extends SimpleDbTestBase {
    */
   @Test public void gtJoin() throws Exception {
     JoinPredicate pred = new JoinPredicate(0, Predicate.Op.GREATER_THAN, 0);
-    Join op = new Join(pred, scan1, scan2);
+    JoinVec op = new JoinVec(pred, scan1, scan2);
     op.open();
     gtJoin.open();
+
     TestUtil.matchAllTuples(gtJoin, op);
   }
 
@@ -107,7 +98,7 @@ public class JoinTest extends SimpleDbTestBase {
    */
   @Test public void eqJoin() throws Exception {
     JoinPredicate pred = new JoinPredicate(0, Predicate.Op.EQUALS, 0);
-    Join op = new Join(pred, scan1, scan2);
+    JoinVec op = new JoinVec(pred, scan1, scan2);
     op.open();
     eqJoin.open();
     TestUtil.matchAllTuples(eqJoin, op);

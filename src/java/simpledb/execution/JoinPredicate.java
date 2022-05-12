@@ -1,5 +1,6 @@
 package simpledb.execution;
 
+import simpledb.execution.vectorize.Chunk;
 import simpledb.storage.Field;
 import simpledb.storage.Tuple;
 
@@ -48,7 +49,25 @@ public class JoinPredicate implements Serializable {
         Field field = t1.getField(field1);
         return field.compare(op, t2.getField(field2));
     }
-    
+
+
+    public boolean[] filterVec(Tuple t1, Chunk chunk) {
+        // some code goes here
+        if (t1== null || chunk.getTuples() == null) {
+            return new boolean[]{};
+        }
+        boolean[] result = new boolean[chunk.getTuples().size()];
+        Field field = t1.getField(field1);
+        int i = 0;
+        for (Tuple t2 : chunk.getTuples()) {
+            if (field.compare(op, t2.getField(field2))) {
+                result[i ++] = true;
+            } else {
+                result[i ++] = false;
+            }
+        }
+        return result;
+    }
     public int getField1()
     {
         // some code goes here

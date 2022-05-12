@@ -1,0 +1,148 @@
+package simpledb.vec;
+
+import junit.framework.JUnit4TestAdapter;
+import org.junit.Before;
+import org.junit.Test;
+import simpledb.execution.vectorize.Chunk;
+import simpledb.execution.vectorize.OpIteratorVec;
+import simpledb.vec.TestUtil;
+import simpledb.common.Utility;
+import simpledb.execution.Filter;
+import simpledb.execution.OpIterator;
+import simpledb.execution.Predicate;
+import simpledb.execution.vectorize.FilterVec;
+import simpledb.storage.Tuple;
+import simpledb.storage.TupleDesc;
+import simpledb.systemtest.SimpleDbTestBase;
+
+import static org.junit.Assert.*;
+
+public class FilterTest extends SimpleDbTestBase {
+
+  final int testWidth = 3;
+  OpIteratorVec scan;
+
+  /**
+   * Initialize each unit test
+   */
+  @Before public void setUp() {
+    this.scan = new TestUtil.MockScan(-5, 5, testWidth);
+  }
+
+  /**
+   * Unit test for Filter.getTupleDesc()
+   */
+  @Test public void getTupleDesc() {
+    Predicate pred = new Predicate(0, Predicate.Op.EQUALS, TestUtil.getField(0));
+    FilterVec op = new FilterVec(pred, scan);
+    TupleDesc expected = Utility.getTupleDesc(testWidth);
+    TupleDesc actual = op.getTupleDesc();
+    assertEquals(expected, actual);
+  }
+
+  /**
+   * Unit test for Filter.rewind()
+   */
+  @Test public void rewind() throws Exception {
+    Predicate pred = new Predicate(0, Predicate.Op.EQUALS, TestUtil.getField(0));
+    FilterVec op = new FilterVec(pred, scan);
+    op.open();
+    assertTrue(op.hasNext());
+    assertNotNull(op.next());
+    assertTrue(TestUtil.checkExhausted(op));
+
+    op.rewind();
+    Tuple expected = Utility.getHeapTuple(0, testWidth);
+//    Tuple actual = op.next();
+    Chunk chunk = op.next();
+    for (Tuple actual : chunk.getTuples()) {
+      assertTrue(TestUtil.compareTuples(expected, actual));
+    }
+    op.close();
+  }
+
+  /**
+   * Unit test for Filter.getNext() using a &lt; predicate that filters
+   *   some tuples
+   */
+  @Test public void filterSomeLessThan() throws Exception {
+    Predicate pred;
+    pred = new Predicate(0, Predicate.Op.LESS_THAN, TestUtil.getField(2));
+    FilterVec op = new FilterVec(pred, scan);
+    TestUtil.MockScan expectedOut = new TestUtil.MockScan(-5, 2, testWidth);
+    op.open();
+    TestUtil.compareDbIterators(op, expectedOut);
+    op.close();
+  }
+
+  /**
+   * Unit test for Filter.getNext() using a &lt; predicate that filters
+   * everything
+   */
+  @Test public void filterAllLessThan() throws Exception {
+    Predicate pred;
+    pred = new Predicate(0, Predicate.Op.LESS_THAN, TestUtil.getField(-5));
+    FilterVec op = new FilterVec(pred, scan);
+    op.open();
+    assertTrue(TestUtil.checkExhausted(op));
+    op.close();
+  }
+
+  /**
+   * Unit test for Filter.getNext() using an = predicate
+   */
+  @Test public void filterEqual() throws Exception {
+    Predicate pred;
+    this.scan = new TestUtil.MockScan(-5, 5, testWidth);
+    pred = new Predicate(0, Predicate.Op.EQUALS, TestUtil.getField(-5));
+    FilterVec op = new FilterVec(pred, scan);
+    op.open();
+    Chunk chunk = op.next();
+    for (Tuple tuple : chunk.getTuples()) {
+      assertTrue(TestUtil.compareTuples(Utility.getHeapTuple(-5, testWidth), tuple));
+    }
+    op.close();
+
+    this.scan = new TestUtil.MockScan(-5, 5, testWidth);
+    pred = new Predicate(0, Predicate.Op.EQUALS, TestUtil.getField(0));
+    op = new FilterVec(pred, scan);
+    op.open();
+    chunk = op.next();
+    for (Tuple tuple : chunk.getTuples()) {
+      assertTrue(TestUtil.compareTuples(Utility.getHeapTuple(0, testWidth), tuple));
+    }
+    op.close();
+
+    this.scan = new TestUtil.MockScan(-5, 5, testWidth);
+    pred = new Predicate(0, Predicate.Op.EQUALS, TestUtil.getField(4));
+    op = new FilterVec(pred, scan);
+    op.open();
+    chunk = op.next();
+    for (Tuple tuple : chunk.getTuples()) {
+      assertTrue(TestUtil.compareTuples(Utility.getHeapTuple(4, testWidth), tuple));
+    }
+//    assertTrue(TestUtil.compareTuples(Utility.getHeapTuple(4, testWidth),
+//        op.next()));
+    op.close();
+  }
+
+  /**
+   * Unit test for Filter.getNext() using an = predicate passing no tuples
+   */
+  @Test public void filterEqualNoTuples() throws Exception {
+    Predicate pred;
+    pred = new Predicate(0, Predicate.Op.EQUALS, TestUtil.getField(5));
+    FilterVec op = new FilterVec(pred, scan);
+    op.open();
+    TestUtil.checkExhausted(op);
+    op.close();
+  }
+
+  /**
+   * JUnit suite target
+   */
+  public static junit.framework.Test suite() {
+    return new JUnit4TestAdapter(FilterTest.class);
+  }
+}
+
